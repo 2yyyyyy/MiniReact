@@ -1,0 +1,31 @@
+{
+	"name": "mini-react",
+	"version": "1.0.0",
+	"description": "",
+	"main": "index.js",
+	"scripts": {
+		"test": "echo \"Error: no test specified\" && exit 1",
+		"lint": "eslint --ext .js,.ts,.tsx,.jsx --fix --quiet ./packages",
+		"prepare": "husky"
+	},
+	"keywords": [],
+	"author": "pkl12y",
+	"license": "ISC",
+	"devDependencies": {
+		"@commitlint/cli": "^19.8.1",
+		"@commitlint/config-conventional": "^19.8.1",
+		"@eslint/js": "^9.29.0",
+		"@types/node": "^24.0.4",
+		"@typescript-eslint/eslint-plugin": "^8.35.0",
+		"@typescript-eslint/parser": "^8.35.0",
+		"commitlint": "^19.8.1",
+		"eslint": "^8.57.1",
+		"eslint-config-prettier": "^10.1.5",
+		"eslint-plugin-prettier": "^5.5.1",
+		"globals": "^16.2.0",
+		"husky": "^9.1.7",
+		"prettier": "^3.6.1",
+		"typescript": "^5.8.3",
+		"typescript-eslint": "^8.35.0"
+	}
+}
