@@ -1,18 +1,39 @@
 import { beginWork } from './beginWork';
 import { completeWork } from './completeWork';
-import { FiberNode } from './fiber';
+import { createWorkInProgress, FiberNode, FiberRootNode } from './fiber';
+import { HostRoot } from './workTags';
 
 // 工作指针
 let workInProgress: FiberNode | null = null;
 
 //初始化工作栈，将根 Fiber 设为当前工作节点
-function prepareFreshStact(fiber: FiberNode) {
-	workInProgress = fiber;
+function prepareFreshStact(root: FiberRootNode) {
+	workInProgress = createWorkInProgress(root.current, {});
+}
+
+export function scheduleUpdateOnFiber(fiber: FiberNode){
+	const root = markUpdateFromFiberToRoot(fiber);
+	renderRoot(root)
+}
+
+function markUpdateFromFiberToRoot(fiber: FiberNode){
+	let node = fiber;
+	let parent = fiber.return;
+
+	while(parent !== null){
+		node = parent;
+		parent = node.return;
+	}
+
+	if(node.tag === HostRoot){
+		return node.stateNode;
+	}
+	return null;
 }
 
 // 启动协调过程的入口函数
-function renderRoot(fiber: FiberNode) {
-	prepareFreshStact(fiber); // 初始化工作栈
+function renderRoot(fiber: FiberRootNode) {
+	prepareFreshStact(fiber ); // 初始化工作栈
 	do {
 		try {
 			workLoop(); // 执行工作循环
