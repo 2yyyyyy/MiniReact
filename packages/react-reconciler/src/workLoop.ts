@@ -6,43 +6,49 @@ import { HostRoot } from './workTags';
 // 工作指针
 let workInProgress: FiberNode | null = null;
 
-//初始化工作栈，将根 Fiber 设为当前工作节点
+//
 function prepareFreshStact(root: FiberRootNode) {
 	workInProgress = createWorkInProgress(root.current, {});
 }
 
-export function scheduleUpdateOnFiber(fiber: FiberNode){
+export function scheduleUpdateOnFiber(fiber: FiberNode) {
 	const root = markUpdateFromFiberToRoot(fiber);
-	renderRoot(root)
+	renderRoot(root);
 }
 
-function markUpdateFromFiberToRoot(fiber: FiberNode){
+function markUpdateFromFiberToRoot(fiber: FiberNode) {
 	let node = fiber;
 	let parent = fiber.return;
 
-	while(parent !== null){
+	while (parent !== null) {
 		node = parent;
 		parent = node.return;
 	}
 
-	if(node.tag === HostRoot){
+	if (node.tag === HostRoot) {
 		return node.stateNode;
 	}
 	return null;
 }
 
-// 启动协调过程的入口函数
-function renderRoot(fiber: FiberRootNode) {
-	prepareFreshStact(fiber ); // 初始化工作栈
+function renderRoot(root: FiberRootNode) {
+	prepareFreshStact(root); // 初始化工作栈
 	do {
 		try {
 			workLoop(); // 执行工作循环
 			break;
 		} catch (e) {
-			console.log('workLoop 发生错误', e);
+			if (__DEV__) {
+				console.log('workLoop 发生错误', e);
+			}
 			workInProgress = null; // 错误处理：重置工作指针
 		}
 	} while (true);
+
+	const finishedWork = root.current.alternate;
+	root.finishedWork = finishedWork;
+
+	// commitRoot(root);
 }
 
 // 持续处理工作单元，直到所有任务完成
