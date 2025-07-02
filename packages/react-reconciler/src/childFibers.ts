@@ -24,7 +24,6 @@ function ChildReconciler(shouldTrackEffects: boolean) {
 
 	/**
 	 * 处理单个文本节点的调和
-	 * 问题: 这里使用了HostComponent而不是HostText
 	 */
 	function reconcilerSingleTextNode(
 		returnFiber: FiberNode,
