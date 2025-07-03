@@ -1,3 +1,4 @@
+import { Dispatch } from 'react/src/currentDispatcher';
 import { Action } from 'shared/ReactTypes';
 
 // Update接口表示一个待应用的更新操作
@@ -10,6 +11,7 @@ export interface UpdateQueue<State> {
 	shared: {
 		pending: Update<State> | null; // 指向最后一个待处理的更新
 	};
+	dispatch: Dispatch<State> | null;
 }
 // 创建一个新的Update对象
 export const createUpdate = <State>(action: Action<State>) => {
@@ -23,7 +25,8 @@ export const createUpdateQueue = <State>() => {
 	return {
 		shared: {
 			pending: null
-		}
+		},
+		dispatch: null
 	} as UpdateQueue<State>;
 };
 
