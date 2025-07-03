@@ -2,8 +2,7 @@ import {
 	appendInitialChild,
 	Container,
 	createInstance,
-	createTextInstance,
-	Instance
+	createTextInstance
 } from 'hostConfig';
 import { FiberNode } from './fiber';
 import {
@@ -12,7 +11,11 @@ import {
 	HostRoot,
 	HostText
 } from './workTags';
-import { NoFlags } from './fiberFlags';
+import { NoFlags, Update } from './fiberFlags';
+
+function markUpdate(fiber: FiberNode) {
+	fiber.flags |= Update;
+}
 
 export const completeWork = (wip: FiberNode) => {
 	// 向上回溯处理兄弟节点和父节点，完成副作用收集。
@@ -33,7 +36,13 @@ export const completeWork = (wip: FiberNode) => {
 		case HostText:
 			if (current !== null && wip.stateNode) {
 				// update
+				const oldText = current.memoizedProps;
+				const newText = newProps.content;
+				if (oldText !== newText) {
+					markUpdate(wip);
+				}
 			} else {
+				// mount
 				const instance = createTextInstance(newProps.content);
 				wip.stateNode = instance;
 			}
