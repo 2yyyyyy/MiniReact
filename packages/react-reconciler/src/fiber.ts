@@ -71,6 +71,7 @@ export class FiberRootNode {
 	}
 }
 
+// 创建工作单元
 export function createWorkInProgress(
 	current: FiberNode,
 	pendingProps: Props
