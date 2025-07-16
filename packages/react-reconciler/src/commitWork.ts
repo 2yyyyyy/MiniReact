@@ -18,6 +18,7 @@ import {
 	HostRoot,
 	HostText
 } from './workTags';
+import { updateFiberProps } from 'react-dom/src/SyntheticEvent';
 
 // 当前正在处理的副作用 fiber 节点
 let nextEffect: FiberNode | null = null;
@@ -96,9 +97,11 @@ function commitUpdate(fiber: FiberNode) {
 	}
 	switch (fiber.tag) {
 		case HostText:
-			const text = fiber.memoizedProps.content;
+			const text = fiber.memoizedProps?.content;
 			commitTextUpdate(fiber.stateNode, text);
 			break;
+		// case HostComponent:
+		// 	updateFiberProps()
 		default:
 			if (__DEV__) {
 				console.warn('未实现的Update操作', fiber);
