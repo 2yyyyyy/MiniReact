@@ -6,6 +6,7 @@ import {
 	createUpdateQueue,
 	enqueueUpdate,
 	processUpdateQueue,
+	Update,
 	UpdateQueue
 } from './updateQueue';
 import { Action } from 'shared/ReactTypes';
@@ -34,6 +35,10 @@ interface Hook {
 	UpdateQueue: unknown;
 	/** 指向下一个Hook的指针，形成链表结构 */
 	next: Hook | null;
+	/** 并发更新时的初始状态值 */
+	baseState: any;
+	/** 并发更新时的更新队列 */
+	baseQueue: Update<any> | null;
 }
 
 export interface Effect {
@@ -211,17 +216,37 @@ function updateState<State>(): [State, Dispatch<State>] {
 	const hook = updateWorkInProgressHook();
 	// 计算新状态值
 	const queue = hook.UpdateQueue as UpdateQueue<State>;
-	const pending = queue.shared.pending;
-	queue.shared.pending = null;
-	if (pending !== null) {
-		const { memoizedState } = processUpdateQueue(
-			hook.memoizedState,
-			pending,
-			renderLane
-		);
-		hook.memoizedState = memoizedState;
-	}
+	const baseState = hook.baseState;
 
+	const pending = queue.shared.pending;
+	const current = currentHook as Hook;
+	let baseQueue = current.baseQueue;
+
+	// pending baseQueue update 保存在current中
+	if (pending !== null) {
+		if (baseQueue !== null) {
+			// 合并baseQueue和pending
+			const baseFirst = baseQueue.next;
+			const pendingFirst = pending.next;
+			baseQueue.next = pendingFirst;
+			pending.next = baseFirst;
+		}
+		baseQueue = pending;
+		// 保存在current中
+		current.baseQueue = pending;
+		queue.shared.pending = null;
+
+		if (baseQueue !== null) {
+			const {
+				memoizedState,
+				baseQueue: newBaseQueue,
+				baseState: newBaseState
+			} = processUpdateQueue(baseState, baseQueue, renderLane);
+			hook.memoizedState = memoizedState;
+			hook.baseState = newBaseState;
+			hook.baseQueue = newBaseQueue;
+		}
+	}
 	return [hook.memoizedState, queue.dispatch as Dispatch<State>];
 }
 
@@ -275,7 +300,9 @@ function mountWorkInProgressHook(): Hook {
 	const hook: Hook = {
 		memoizedState: null,
 		UpdateQueue: null,
-		next: null
+		next: null,
+		baseState: null,
+		baseQueue: null
 	};
 	// mount时第一个hook
 	if (workInProgressHook === null) {
@@ -314,14 +341,16 @@ function updateWorkInProgressHook(): Hook {
 	if (nextCurrentHook === null) {
 		// mount/update u1 u2 u3
 		// update       u1 u2 u3 u4
-		throw new Error('hook数量不一致');
+		console.log('hook数量不一致');
 	}
 
 	currentHook = nextCurrentHook as Hook;
 	const newHook: Hook = {
 		memoizedState: currentHook.memoizedState,
 		UpdateQueue: currentHook.UpdateQueue,
-		next: null
+		next: null,
+		baseState: currentHook.baseState,
+		baseQueue: currentHook.baseQueue
 	};
 	if (workInProgressHook === null) {
 		if (currentlyRenderingFiber === null) {

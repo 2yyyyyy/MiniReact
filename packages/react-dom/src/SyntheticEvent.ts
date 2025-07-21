@@ -1,4 +1,10 @@
 import { Container } from 'hostConfig';
+import {
+	unstable_ImmediatePriority,
+	unstable_NormalPriority,
+	unstable_runWithPriority,
+	unstable_UserBlockingPriority
+} from 'scheduler';
 import { Props } from 'shared/ReactTypes';
 
 export const elementPropsKey = '__props'; // 存储 props 的 key，用于 DOMElement 上的自定义属性
@@ -34,7 +40,6 @@ export function initEvent(container: Container, eventType: string) {
 	if (__DEV__) {
 		console.log(`初始化${eventType}事件`);
 	}
-
 	// 容器级别注册事件监听器（事件委托）
 	container.addEventListener(eventType, (e) => {
 		dispatchEvent(container, eventType, e);
@@ -55,7 +60,6 @@ function dispatchEvent(container: Container, eventType: string, e: Event) {
 		container,
 		eventType
 	);
-
 	// 2. 构造合成事件（模拟 React 的 stopPropagation）
 	const se = createSyntheticEvent(e);
 
@@ -72,7 +76,9 @@ function dispatchEvent(container: Container, eventType: string, e: Event) {
 function triggerEventFlow(paths: EventCallback[], se: SyntheticEvent) {
 	for (let i = 0; i < paths.length; i++) {
 		const callback = paths[i];
-		callback.call(null, se);
+		unstable_runWithPriority(eventTypeToSchedulerPriority(se.type), () => {
+			callback.call(null, se);
+		});
 		if (se.__stopPropagation) {
 			break;
 		}
@@ -141,4 +147,18 @@ function getEventCallbackNameFormEventType(
 	return {
 		click: ['onClickCapture', 'onClick']
 	}[eventType];
+}
+
+// 事件类型转换为优先级
+function eventTypeToSchedulerPriority(eventType: string) {
+	switch (eventType) {
+		case 'click':
+		case 'keydown':
+		case 'keyup':
+			return unstable_ImmediatePriority;
+		case 'scroll':
+			return unstable_UserBlockingPriority;
+		default:
+			return unstable_NormalPriority;
+	}
 }
