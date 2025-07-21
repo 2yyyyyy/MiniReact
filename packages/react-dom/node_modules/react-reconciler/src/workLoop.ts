@@ -99,6 +99,10 @@ function ensureRootIsScheduled(root: FiberRootNode) {
 		scheduleMictask(flushSyncCallbacks);
 	} else {
 		// 其它优先级 宏任务调度
+		// 同步任务 微任务调度
+		if (__DEV__) {
+			console.log('宏任务调度 优先级：', updateLane);
+		}
 		const schedulerPriority = lanesToSchedulerPriority(updateLane);
 		newCallbackNode = scheduleCallback(
 			schedulerPriority,

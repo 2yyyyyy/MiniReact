@@ -14,6 +14,7 @@ import { scheduleUpdateOnFiber } from './workLoop';
 import { Lane, NoLane, requestUpdateLane } from './fiberLanes';
 import { Flags, PassiveEffect } from './fiberFlags';
 import { HookHasEffect, Passive } from './hookEffectTags';
+import currentBatchConfig from 'react/src/currentBatchConfig';
 
 /** 当前正在渲染的Fiber节点 */
 let currentlyRenderingFiber: FiberNode | null = null;
@@ -97,12 +98,14 @@ export function renderWithHooks(wip: FiberNode, lane: Lane) {
 /** 挂载阶段的Hook调度器实现 */
 const HookDispatcherOnMount: Dispatcher = {
 	useState: mountState,
-	useEffect: mountEffect
+	useEffect: mountEffect,
+	useTransition: mountTransition
 };
 /** 更新阶段的Hook调度器实现 */
 const HookDispatcherOnUpdate: Dispatcher = {
 	useState: updateState,
-	useEffect: updateEffect
+	useEffect: updateEffect,
+	useTransition: updateTransition
 };
 
 // mount时的useEffect
@@ -211,6 +214,36 @@ function createFCUpdateQueue<State>() {
 	return updateQueue;
 }
 
+/**
+ * 实现useState钩子的挂载逻辑
+ * @param initialState 初始状态值或状态初始化函数
+ * @returns [当前状态, 状态更新函数]
+ */
+function mountState<State>(
+	initialState: State | (() => State)
+): [State, Dispatch<State>] {
+	// 找到当前useState对应的hook数据
+	const hook = mountWorkInProgressHook();
+
+	// 处理初始状态（支持函数形式的初始值）
+	let memoizedState;
+	if (initialState instanceof Function) {
+		memoizedState = initialState();
+	} else {
+		memoizedState = initialState;
+	}
+
+	const queue = createUpdateQueue<State>();
+	hook.UpdateQueue = queue;
+	hook.memoizedState = memoizedState;
+	hook.baseState = memoizedState;
+
+	// @ts-ignore
+	const dispatch = dispatchSetState.bind(null, currentlyRenderingFiber, queue);
+	queue.dispatch = dispatch;
+	return [memoizedState, dispatch];
+}
+
 function updateState<State>(): [State, Dispatch<State>] {
 	// 找到当前useState对应的hook数据
 	const hook = updateWorkInProgressHook();
@@ -235,50 +268,74 @@ function updateState<State>(): [State, Dispatch<State>] {
 		// 保存在current中
 		current.baseQueue = pending;
 		queue.shared.pending = null;
+	}
 
-		if (baseQueue !== null) {
-			const {
-				memoizedState,
-				baseQueue: newBaseQueue,
-				baseState: newBaseState
-			} = processUpdateQueue(baseState, baseQueue, renderLane);
-			hook.memoizedState = memoizedState;
-			hook.baseState = newBaseState;
-			hook.baseQueue = newBaseQueue;
-		}
+	if (baseQueue !== null) {
+		const {
+			memoizedState,
+			baseQueue: newBaseQueue,
+			baseState: newBaseState
+		} = processUpdateQueue(baseState, baseQueue, renderLane);
+		hook.memoizedState = memoizedState;
+		hook.baseState = newBaseState;
+		hook.baseQueue = newBaseQueue;
 	}
 	return [hook.memoizedState, queue.dispatch as Dispatch<State>];
 }
 
-/**
- * 实现useState钩子的挂载逻辑
- * @param initialState 初始状态值或状态初始化函数
- * @returns [当前状态, 状态更新函数]
- */
-function mountState<State>(
-	initialState: State | (() => State)
-): [State, Dispatch<State>] {
-	// 找到当前useState对应的hook数据
+function mountTransition(): [boolean, (callback: () => null) => void] {
+	// 初始化 isPending 状态为 false，用于表示当前是否处于 transition 状态
+	// mountState 是 React 内部用于 useState 初始化的函数
+	const [isPending, setIsPending] = mountState(false);
+
+	// 注册一个 Hook 对象，挂在当前 fiber 的 memoizedState 上，用于存储 transition 函数
 	const hook = mountWorkInProgressHook();
 
-	// 处理初始状态（支持函数形式的初始值）
-	let memoizedState;
-	if (initialState instanceof Function) {
-		memoizedState = initialState();
-	} else {
-		memoizedState = initialState;
-	}
+	// 创建 startTransition 函数，并绑定 setIsPending 作为第一个参数
+	const start = startTransition.bind(null, setIsPending);
 
-	const queue = createUpdateQueue<State>();
-	hook.UpdateQueue = queue;
-	hook.memoizedState = memoizedState;
+	// 把这个函数保存到当前 hook 中，便于更新时复用
+	hook.memoizedState = start;
 
-	// @ts-ignore
-	const dispatch = dispatchSetState.bind(null, currentlyRenderingFiber, queue);
-	queue.dispatch = dispatch;
-	return [memoizedState, dispatch];
+	// 返回 [状态, 启动函数]，即 useTransition 的值
+	return [isPending, start];
 }
 
+function updateTransition(): [boolean, (callback: () => null) => void] {
+	// 取出当前 isPending 状态值
+	const [isPending] = updateState();
+
+	// 获取当前 hook 对象
+	const hook = updateWorkInProgressHook();
+
+	// 取出保存的 startTransition 函数
+	const start = hook.memoizedState;
+
+	// 返回和 mount 时一样的结构
+	return [isPending as boolean, start];
+}
+
+function startTransition(
+	setIsPending: Dispatch<boolean>,
+	callback: () => null
+) {
+	// 标记：进入 transition 中，触发刷新，显示 loading UI 等
+	setIsPending(true);
+
+	// 保存当前批处理配置中的 transition 标志（用于恢复现场）
+	const prevTransition = currentBatchConfig.transition;
+
+	// 设置全局的 batchConfig 标志：表示当前是 transition 更新
+	currentBatchConfig.transition = 1;
+
+	// 执行传入的更新函数，比如 setState()
+	callback();
+
+	// 结束 transition，状态恢复正常
+	setIsPending(false);
+
+	currentBatchConfig.transition = prevTransition;
+}
 /**
  * 处理状态更新的函数
  * @param fiber 关联的Fiber节点
