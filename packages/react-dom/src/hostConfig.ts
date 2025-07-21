@@ -1,5 +1,7 @@
 import { Props } from 'shared/ReactTypes';
 import { DOMElement, updateFiberProps } from './SyntheticEvent';
+import { FiberNode } from 'react-reconciler/src/fiber';
+import { HostText, HostComponent } from 'react-reconciler/src/workTags';
 
 export type Container = Element;
 export type Instance = Element;
@@ -45,6 +47,24 @@ export function insertChildToContainer(
 	before: Instance
 ) {
 	container.insertBefore(child, before);
+}
+
+export function commitUpdate(fiber: FiberNode) {
+	if (__DEV__) {
+		console.log('执行Update操作', fiber);
+	}
+	switch (fiber.tag) {
+		case HostText:
+			const text = fiber.memoizedProps?.content;
+			return commitTextUpdate(fiber.stateNode, text);
+		case HostComponent:
+			return updateFiberProps(fiber.stateNode, fiber.memoizedProps);
+		default:
+			if (__DEV__) {
+				console.warn('未实现的Update操作', fiber);
+			}
+			break;
+	}
 }
 
 export const scheduleMictask =
