@@ -1,4 +1,5 @@
 import {
+	ContextProvider,
 	Fragment,
 	FunctionComponent,
 	HostComponent,
@@ -10,6 +11,7 @@ import { Container } from 'hostConfig';
 import { Lane, Lanes, NoLane, NoLanes } from './fiberLanes';
 import { Effect } from './fiberHooks';
 import { CallbackNode } from 'scheduler';
+import { REACT_PROVIDER_TYPE } from 'shared/ReactSymbols';
 
 export class FiberNode {
 	type: any;
@@ -140,8 +142,13 @@ export function createFiberFromElement(element: ReactElementType) {
 	if (typeof type === 'string') {
 		// <div/>
 		fiberTag = HostComponent;
+	} else if (
+		typeof type === 'object' &&
+		type.$$typeof === REACT_PROVIDER_TYPE
+	) {
+		fiberTag = ContextProvider;
 	} else if (typeof type !== 'function' && __DEV__) {
-		console.warn('未实现的reconciler类型', element);
+		console.warn('未定义的type类型 ', element);
 	}
 	const fiber = new FiberNode(fiberTag, props, key);
 	fiber.type = type;
@@ -149,7 +156,7 @@ export function createFiberFromElement(element: ReactElementType) {
 	return fiber;
 }
 
-// 根据reactElement创建fiberNode
+// 根据Fragment创建fiberNode
 export function createFiberFromFragment(elements: any[], key: Key) {
 	const fiber = new FiberNode(Fragment, elements, key);
 	return fiber;
