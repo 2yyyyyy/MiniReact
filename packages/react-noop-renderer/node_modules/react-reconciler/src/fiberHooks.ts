@@ -99,14 +99,29 @@ export function renderWithHooks(wip: FiberNode, lane: Lane) {
 const HookDispatcherOnMount: Dispatcher = {
 	useState: mountState,
 	useEffect: mountEffect,
-	useTransition: mountTransition
+	useTransition: mountTransition,
+	useRef: mountRef
 };
 /** 更新阶段的Hook调度器实现 */
 const HookDispatcherOnUpdate: Dispatcher = {
 	useState: updateState,
 	useEffect: updateEffect,
-	useTransition: updateTransition
+	useTransition: updateTransition,
+	useRef: updateRef
 };
+
+// re = useRef(null)
+function mountRef<T>(initialValue: T): { current: T } {
+	const hook = mountWorkInProgressHook();
+	const ref = { current: initialValue };
+	hook.memoizedState = ref;
+	return ref;
+}
+
+function updateRef<T>(initialValue: T): { current: T } {
+	const hook = updateWorkInProgressHook();
+	return hook.memoizedState;
+}
 
 // mount时的useEffect
 function mountEffect(create: EffectCallback | void, deps: EffectDeps | void) {
@@ -135,8 +150,6 @@ function updateEffect(create: EffectCallback | void, deps: EffectDeps | void) {
 		if (nextDeps !== null) {
 			// 浅比较依赖
 			const prevDeps = prevEffect.deps;
-			console.log('updateEffect', prevDeps, nextDeps);
-			console.log('areHookInputEqual', areHookInputEqual(nextDeps, prevDeps));
 			if (areHookInputEqual(nextDeps, prevDeps)) {
 				hook.memoizedState = pushEffect(Passive, create, destroy, nextDeps);
 				return;

@@ -11,11 +11,13 @@ import { FiberNode, FiberRootNode, PendingPassiveEffects } from './fiber';
 import {
 	ChildDeletion,
 	Flags,
+	LayoutMask,
 	MutationMask,
 	NoFlags,
 	PassiveEffect,
 	PassiveMask,
 	Placement,
+	Ref,
 	Update
 } from './fiberFlags';
 import {
@@ -30,44 +32,46 @@ import { HookHasEffect } from './hookEffectTags';
 // 当前正在处理的副作用 fiber 节点
 let nextEffect: FiberNode | null = null;
 // 遍历并处理 Mutation 类型的副作用（插入、更新、删除）
-export const commitMutationEffects = (
-	finishedWork: FiberNode,
-	root: FiberRootNode
-) => {
-	nextEffect = finishedWork;
 
-	while (nextEffect !== null) {
-		const child: FiberNode | null = nextEffect.child;
-		// 如果子树中有 mutation 副作用，则向下进入子节点
-		if (
-			(nextEffect.subtreeFlags & (MutationMask | PassiveMask)) !== NoFlags &&
-			child !== null
-		) {
-			// 向下遍历直到叶子节点（如 HostComponent、HostText），因为只有叶子节点才直接对应真实 DOM 操作
-			nextEffect = child;
-		} else {
-			// 向上遍历，直到处理完当前节点并找到兄弟节点
-			up: while (nextEffect !== null) {
-				// 执行当前节点的 mutation 操作
-				commitMutationEffectOnFiber(nextEffect, root);
-				// 如果有兄弟节点，继续遍历兄弟进行处理
-				const sibling: FiberNode | null = nextEffect.sibling;
-				if (sibling !== null) {
-					nextEffect = sibling;
-					break up;
+// commit阶段子阶段
+export const commitEffects = (
+	phrase: 'mutation' | 'layout',
+	mask: Flags,
+	callback: (fiber: FiberNode, root: FiberRootNode) => void
+) => {
+	return (finishedWork: FiberNode, root: FiberRootNode) => {
+		nextEffect = finishedWork;
+		while (nextEffect !== null) {
+			const child: FiberNode | null = nextEffect.child;
+			// 如果子树中有 mutation 副作用，则向下进入子节点
+			if ((nextEffect.subtreeFlags & mask) !== NoFlags && child !== null) {
+				// 向下遍历直到叶子节点（如 HostComponent、HostText），因为只有叶子节点才直接对应真实 DOM 操作
+				nextEffect = child;
+			} else {
+				// 向上遍历，直到处理完当前节点并找到兄弟节点
+				up: while (nextEffect !== null) {
+					// 执行当前节点的 mutation 操作
+					callback(nextEffect, root);
+					// 如果有兄弟节点，继续遍历兄弟进行处理
+					const sibling: FiberNode | null = nextEffect.sibling;
+					if (sibling !== null) {
+						nextEffect = sibling;
+						break up;
+					}
+					// 向上回溯
+					nextEffect = nextEffect.return;
 				}
-				// 向上回溯
-				nextEffect = nextEffect.return;
 			}
 		}
-	}
+	};
 };
 
+// 执行commit操作
 const commitMutationEffectOnFiber = (
 	finishedWork: FiberNode,
 	root: FiberRootNode
 ) => {
-	const flags = finishedWork.flags;
+	const { flags, tag } = finishedWork;
 	// flags Placement 插入（挂载新 DOM）
 	if ((flags & Placement) !== NoFlags) {
 		commitPlacement(finishedWork);
@@ -96,7 +100,49 @@ const commitMutationEffectOnFiber = (
 		commitPassiveEffect(finishedWork, root, 'update');
 		finishedWork.flags &= ~PassiveEffect;
 	}
+
+	if ((flags & Ref) !== NoFlags && tag === HostComponent) {
+		// 解绑之前的ref
+		safelyDetachRef(finishedWork);
+	}
 };
+
+const commitLayoutEffectOnFiber = (
+	finishedWork: FiberNode,
+	root: FiberRootNode
+) => {
+	const { flags, tag } = finishedWork;
+	// flags Placement 插入（挂载新 DOM）
+	if ((flags & Ref) !== NoFlags && tag === HostComponent) {
+		// 绑定新的ref
+		safelyAttachRef(finishedWork);
+		finishedWork.flags &= ~Ref;
+	}
+};
+
+// 绑定ref
+function safelyAttachRef(fiber: FiberNode) {
+	const ref = fiber.ref;
+	if (ref !== null) {
+		const instance = fiber.stateNode;
+		if (typeof ref === 'function') {
+			ref(instance);
+		} else {
+			ref.current = instance;
+		}
+	}
+}
+// 解绑ref
+function safelyDetachRef(current: FiberNode) {
+	const ref = current.ref;
+	if (ref !== null) {
+		if (typeof ref === 'function') {
+			ref(null);
+		} else {
+			ref.current = null;
+		}
+	}
+}
 
 // 收集回调
 // 只处理函数组件
@@ -266,6 +312,7 @@ function recordHostChildrenToDelete(
 	}
 }
 
+// 执行删除操作 组件卸载
 function commitDeletion(childToDelete: FiberNode, root: FiberRootNode) {
 	const rootChildrenToDelete: FiberNode[] = [];
 	// 递归子树
@@ -273,6 +320,8 @@ function commitDeletion(childToDelete: FiberNode, root: FiberRootNode) {
 		switch (unmountFiber.tag) {
 			case HostComponent:
 				recordHostChildrenToDelete(rootChildrenToDelete, unmountFiber);
+				// 解绑ref
+				safelyDetachRef(unmountFiber);
 				return;
 			case HostText:
 				// 找到第一个真实 DOM 节点，用于后续 removeChild
@@ -374,3 +423,15 @@ function insertOrAppendPlacementNodeIntoContainer(
 		}
 	}
 }
+
+export const commitMutationEffects = commitEffects(
+	'mutation',
+	MutationMask | PassiveMask,
+	commitMutationEffectOnFiber
+);
+
+export const commitLayoutEffects = commitEffects(
+	'layout',
+	LayoutMask | PassiveMask,
+	commitLayoutEffectOnFiber
+);

@@ -4,6 +4,7 @@ import {
 	commitHookEffectListCreate,
 	commitHookEffectListDestroy,
 	commitHookEffectListUnmount,
+	commitLayoutEffects,
 	commitMutationEffects
 } from './commitWork';
 import { completeWork } from './completeWork';
@@ -275,12 +276,16 @@ function commitRoot(root: FiberRootNode) {
 		(finishedWork.subtreeFlags & MutationMask) !== NoFlags;
 	const rootHasEffect = (finishedWork.flags & MutationMask) !== NoFlags;
 	if (subtreeHasEffect || rootHasEffect) {
-		// beforeMutation
-		// mutation Placement
+		// 阶段1/3 beforeMutation
+
+		// 阶段2/3 mutation
 		commitMutationEffects(finishedWork, root);
 
+		// Fiber Tree切换
 		root.current = finishedWork;
-		// layout
+
+		// 阶段3/3 Layout
+		commitLayoutEffects(finishedWork, root);
 	} else {
 		root.current = finishedWork;
 	}
@@ -330,6 +335,7 @@ function workLoopConcurrent() {
 function performUnitOfWork(fiber: FiberNode) {
 	// 开始beginWork
 	const next = beginWork(fiber, wipRootRenderLane); // 处理当前节点，返回子 Fiber
+
 	fiber.memoizedProps = fiber.pendingProps; // 保存当前 props
 
 	if (next === null) {

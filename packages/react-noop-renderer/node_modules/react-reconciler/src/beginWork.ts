@@ -11,6 +11,7 @@ import { mountChildFibers, reconcilerChildFibers } from './childFibers';
 import { ReactElementType } from 'shared/ReactTypes';
 import { renderWithHooks } from './fiberHooks';
 import { Lane } from './fiberLanes';
+import { Ref } from './fiberFlags';
 
 /**
  * 开始处理Fiber节点的核心函数
@@ -76,6 +77,7 @@ function updateHostRoot(wip: FiberNode, renderLane: Lane) {
 function updateHostComponent(wip: FiberNode) {
 	const nextProps = wip.pendingProps; // 获取待处理的props
 	const nextChildren = nextProps.children; // 子节点来自props.children
+	markRef(wip.alternate, wip);
 	reconcileChildren(wip, nextChildren); // 调和子节点
 	return wip.child; // 返回第一个子节点继续处理
 }
@@ -91,5 +93,16 @@ function reconcileChildren(wip: FiberNode, children?: ReactElementType) {
 	} else {
 		// 挂载阶段 - 使用mountChildFibers不追踪副作用
 		wip.child = mountChildFibers(wip, null, children);
+	}
+}
+
+function markRef(current: FiberNode | null, workInProgress: FiberNode) {
+	const ref = workInProgress.ref;
+
+	if (
+		(current === null && ref !== null) || // mount
+		(current !== null && current.ref !== ref) // update
+	) {
+		workInProgress.flags |= Ref;
 	}
 }
