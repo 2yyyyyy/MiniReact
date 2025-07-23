@@ -73,3 +73,22 @@ export const scheduleMictask =
 		: typeof Promise === 'function'
 		? (callback: (...args: any) => void) => Promise.resolve(null).then(callback)
 		: setTimeout;
+
+export function hideInstance(instance: Instance) {
+	const style = (instance as HTMLElement).style;
+	style.setProperty('display', 'none', 'important');
+	// style.visibility = 'hidden';
+}
+
+export function unhideInstance(instance: Instance) {
+	const style = (instance as HTMLElement).style;
+	style.display = '';
+}
+
+export function hideTextInstance(textInstance: TextInstance) {
+	textInstance.nodeValue = '';
+}
+
+export function unhideTextInstance(textInstance: TextInstance, text: string) {
+	textInstance.nodeValue = text;
+}

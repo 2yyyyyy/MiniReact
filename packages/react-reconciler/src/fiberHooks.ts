@@ -9,12 +9,14 @@ import {
 	Update,
 	UpdateQueue
 } from './updateQueue';
-import { Action, ReactContext } from 'shared/ReactTypes';
+import { Action, ReactContext, Thenable, Usable } from 'shared/ReactTypes';
 import { scheduleUpdateOnFiber } from './workLoop';
 import { Lane, NoLane, requestUpdateLane } from './fiberLanes';
 import { Flags, PassiveEffect } from './fiberFlags';
 import { HookHasEffect, Passive } from './hookEffectTags';
 import currentBatchConfig from 'react/src/currentBatchConfig';
+import { REACT_CONTEXT_TYPE } from 'shared/ReactSymbols';
+import { trackUsedThenable } from './thenable';
 
 /** 当前正在渲染的Fiber节点 */
 let currentlyRenderingFiber: FiberNode | null = null;
@@ -101,7 +103,8 @@ const HookDispatcherOnMount: Dispatcher = {
 	useEffect: mountEffect,
 	useTransition: mountTransition,
 	useRef: mountRef,
-	useContext: readContext
+	useContext: readContext,
+	use
 };
 /** 更新阶段的Hook调度器实现 */
 const HookDispatcherOnUpdate: Dispatcher = {
@@ -109,8 +112,30 @@ const HookDispatcherOnUpdate: Dispatcher = {
 	useEffect: updateEffect,
 	useTransition: updateTransition,
 	useRef: updateRef,
-	useContext: readContext
+	useContext: readContext,
+	use
 };
+
+function use<T>(usable: Usable<T>) {
+	if (usable !== null && typeof usable === 'object') {
+		if (typeof (usable as Thenable<T>).then === 'function') {
+			// Thenable
+			const thenable = usable as Thenable<T>;
+			return trackUsedThenable(thenable);
+		} else if ((usable as ReactContext<T>).$$typeof === REACT_CONTEXT_TYPE) {
+			// ReactContext
+			const context = usable as ReactContext<T>;
+			return readContext(context);
+		}
+	}
+	throw new Error('不支持的use参数' + usable);
+}
+
+export function resetHooksOnUnwind() {
+	currentlyRenderingFiber = null;
+	workInProgressHook = null;
+	currentHook = null;
+}
 
 function readContext<T>(context: ReactContext<T>): T {
 	const consumer = currentlyRenderingFiber;

@@ -3,15 +3,17 @@ import {
 	Fragment,
 	FunctionComponent,
 	HostComponent,
+	OffscreenComponent,
+	SuspenseComponent,
 	WorkTag
 } from './workTags';
-import { Props, Key, Ref, ReactElementType } from 'shared/ReactTypes';
+import { Props, Key, Ref, ReactElementType, Wakeable } from 'shared/ReactTypes';
 import { Flags, NoFlags } from './fiberFlags';
 import { Container } from 'hostConfig';
 import { Lane, Lanes, NoLane, NoLanes } from './fiberLanes';
 import { Effect } from './fiberHooks';
 import { CallbackNode } from 'scheduler';
-import { REACT_PROVIDER_TYPE } from 'shared/ReactSymbols';
+import { REACT_PROVIDER_TYPE, REACT_SUSPENSE_TYPE } from 'shared/ReactSymbols';
 
 export class FiberNode {
 	type: any;
@@ -75,6 +77,11 @@ export interface PendingPassiveEffects {
 	update: Effect[];
 }
 
+export interface OffscreenProps {
+	mode: 'hidden' | 'visible';
+	children: any;
+}
+
 export class FiberRootNode {
 	container: Container;
 	current: FiberNode;
@@ -90,12 +97,20 @@ export class FiberRootNode {
 	callBackNode: CallbackNode | null;
 	callBackPriority: Lane;
 
+	pingCache: WeakMap<Wakeable<any>, Set<Lane>> | null;
+	suspendedLanes: Lanes;
+	pingLanes: Lanes;
+
 	constructor(container: Container, hostRootFiber: FiberNode) {
 		this.container = container;
 		this.current = hostRootFiber;
 		hostRootFiber.stateNode = this;
 		this.finishedWork = null;
+
 		this.pendingLanes = NoLanes;
+		this.suspendedLanes = NoLanes;
+		this.pingLanes = NoLanes;
+
 		this.finishedLane = NoLane;
 		this.pendingPassiveEffects = {
 			unmount: [],
@@ -103,10 +118,12 @@ export class FiberRootNode {
 		};
 		this.callBackNode = null;
 		this.callBackPriority = NoLane;
+
+		this.pingCache = null;
 	}
 }
 
-// 创建工作单元
+// 创建工作单元 复用fiber时调用
 export function createWorkInProgress(
 	current: FiberNode,
 	pendingProps: Props
@@ -147,6 +164,8 @@ export function createFiberFromElement(element: ReactElementType) {
 		type.$$typeof === REACT_PROVIDER_TYPE
 	) {
 		fiberTag = ContextProvider;
+	} else if (type === REACT_SUSPENSE_TYPE) {
+		fiberTag = SuspenseComponent;
 	} else if (typeof type !== 'function' && __DEV__) {
 		console.warn('未定义的type类型 ', element);
 	}
@@ -159,5 +178,11 @@ export function createFiberFromElement(element: ReactElementType) {
 // 根据Fragment创建fiberNode
 export function createFiberFromFragment(elements: any[], key: Key) {
 	const fiber = new FiberNode(Fragment, elements, key);
+	return fiber;
+}
+
+// 根据Offscreen创建fiberNode
+export function createFiberFromOffscreen(pendingProps: OffscreenProps) {
+	const fiber = new FiberNode(OffscreenComponent, pendingProps, null);
 	return fiber;
 }

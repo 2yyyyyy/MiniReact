@@ -3,9 +3,13 @@ import {
 	commitTextUpdate,
 	commitUpdate,
 	Container,
+	hideInstance,
+	hideTextInstance,
 	insertChildToContainer,
 	Instance,
-	removeChild
+	removeChild,
+	unhideInstance,
+	unhideTextInstance
 } from 'hostConfig';
 import { FiberNode, FiberRootNode, PendingPassiveEffects } from './fiber';
 import {
@@ -18,13 +22,15 @@ import {
 	PassiveMask,
 	Placement,
 	Ref,
-	Update
+	Update,
+	Visibility
 } from './fiberFlags';
 import {
 	FunctionComponent,
 	HostComponent,
 	HostRoot,
-	HostText
+	HostText,
+	OffscreenComponent
 } from './workTags';
 import { Effect, FCUpdateQueue } from './fiberHooks';
 import { HookHasEffect } from './hookEffectTags';
@@ -105,7 +111,91 @@ const commitMutationEffectOnFiber = (
 		// 解绑之前的ref
 		safelyDetachRef(finishedWork);
 	}
+
+	if ((flags & Visibility) !== NoFlags && tag === OffscreenComponent) {
+		const isHidden = finishedWork.pendingProps.mode === 'hidden';
+		// 隐藏子树顶层Host节点 visibility node
+		hideOrUnhideAllChildren(finishedWork, isHidden);
+		finishedWork.flags &= ~Visibility;
+	}
 };
+
+function hideOrUnhideAllChildren(finishedWork: FiberNode, isHidden: boolean) {
+	findHostSubtreeRoot(finishedWork, (hostRoot) => {
+		const instance = hostRoot.stateNode;
+		if (hostRoot.tag === HostComponent) {
+			isHidden ? hideInstance(instance) : unhideInstance(instance);
+		} else if (hostRoot.tag === HostText) {
+			isHidden
+				? hideTextInstance(instance)
+				: unhideTextInstance(instance, hostRoot.memoizedProps.content);
+		}
+	});
+}
+
+// 找到子树顶层host节点
+function findHostSubtreeRoot(
+	finishedWork: FiberNode,
+	callback: (hostSubtreeRoot: FiberNode) => void
+) {
+	let node = finishedWork;
+	let hostSubtreeRoot = null;
+	while (true) {
+		// TODO 处理逻辑
+		if (node.tag === HostComponent) {
+			if (hostSubtreeRoot === null) {
+				hostSubtreeRoot = node;
+				callback(node);
+			}
+		} else if (node.tag === HostText) {
+			if (hostSubtreeRoot === null) {
+				callback(node);
+			}
+		} else if (
+			node.tag === OffscreenComponent &&
+			node.pendingProps.mode === 'hidden' &&
+			node !== finishedWork
+		) {
+			//Offscreen嵌套
+		} else if (node.child !== null) {
+			node.child.return = node;
+			node = node.child;
+			continue;
+		}
+		//  1. 遇到子节点：往下走（DFS）
+		// 如果当前节点有子节点，则进入子节点；
+		// 同时将子节点的 return 指向当前节点（即设置“父节点”引用）；
+		// 然后继续下一轮循环（继续向下钻）。
+
+		// 2. 当前为叶子节点 且回到根：结束遍历
+		// 如果我们回到了根节点，并且它已经没有子节点或兄弟节点了，说明遍历完成，退出。
+		if (node === finishedWork) {
+			return;
+		}
+
+		// 3. 向上回溯，找兄弟节点
+		// 如果当前节点没有兄弟节点（说明是其父节点的最后一个子节点），就向上回溯，直到找到一个存在兄弟节点的父节点；
+		// 如果回溯到根了（没有父节点或等于 finishedWork），说明整棵树遍历完了，退出。
+		while (node.sibling === null) {
+			if (node.return === null || node.return === finishedWork) {
+				return;
+			}
+
+			if (hostSubtreeRoot === node) {
+				hostSubtreeRoot = null;
+			}
+
+			node = node.return;
+		}
+		// 4. 找到兄弟节点，转过去继续
+		// 找到了兄弟节点，就跳过去，并设置它的 return 为当前节点的父节点。
+		if (hostSubtreeRoot === node) {
+			hostSubtreeRoot = null;
+		}
+		node.sibling.return = node.return;
+		node = node.sibling;
+	}
+}
 
 const commitLayoutEffectOnFiber = (
 	finishedWork: FiberNode,

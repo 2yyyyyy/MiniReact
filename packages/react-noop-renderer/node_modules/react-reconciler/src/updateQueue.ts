@@ -152,9 +152,6 @@ export const processUpdateQueue = <State>(
 				} else {
 					newState = action;
 				}
-				if (__DEV__) {
-					console.log('不应该updateLane !== renderLane');
-				}
 			}
 			pending = pending.next as Update<any>;
 		} while (pending !== first);
