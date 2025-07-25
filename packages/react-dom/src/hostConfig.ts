@@ -67,7 +67,7 @@ export function commitUpdate(fiber: FiberNode) {
 	}
 }
 
-export const scheduleMictask =
+export const scheduleMicrotask =
 	typeof queueMicrotask === 'function'
 		? queueMicrotask
 		: typeof Promise === 'function'

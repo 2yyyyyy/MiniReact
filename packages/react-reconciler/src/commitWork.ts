@@ -78,6 +78,7 @@ const commitMutationEffectOnFiber = (
 	root: FiberRootNode
 ) => {
 	const { flags, tag } = finishedWork;
+	const current = finishedWork.alternate;
 	// flags Placement 插入（挂载新 DOM）
 	if ((flags & Placement) !== NoFlags) {
 		commitPlacement(finishedWork);
@@ -109,7 +110,9 @@ const commitMutationEffectOnFiber = (
 
 	if ((flags & Ref) !== NoFlags && tag === HostComponent) {
 		// 解绑之前的ref
-		safelyDetachRef(finishedWork);
+		if (current !== null) {
+			safelyDetachRef(current);
+		}
 	}
 
 	if ((flags & Visibility) !== NoFlags && tag === OffscreenComponent) {
@@ -522,6 +525,6 @@ export const commitMutationEffects = commitEffects(
 
 export const commitLayoutEffects = commitEffects(
 	'layout',
-	LayoutMask | PassiveMask,
+	LayoutMask,
 	commitLayoutEffectOnFiber
 );

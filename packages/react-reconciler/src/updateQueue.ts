@@ -1,12 +1,15 @@
 import { Dispatch } from 'react/src/currentDispatcher';
 import { Action } from 'shared/ReactTypes';
-import { isSubsetOfLanes, Lane, NoLane } from './fiberLanes';
+import { isSubsetOfLanes, Lane, mergeLanes, NoLane } from './fiberLanes';
+import { FiberNode } from './fiber';
 
 // Update接口表示一个待应用的更新操作
 export interface Update<State> {
 	action: Action<State>; // 要执行的更新动作，可以是新状态值或函数
 	next: Update<any> | null;
 	lane: Lane;
+	hasEagerState: boolean;
+	eagerState: State | null;
 }
 // UpdateQueue接口表示一个更新队列
 export interface UpdateQueue<State> {
@@ -19,12 +22,16 @@ export interface UpdateQueue<State> {
 // 创建一个新的Update对象
 export const createUpdate = <State>(
 	action: Action<State>,
-	lane: Lane
+	lane: Lane,
+	hasEagerState = false,
+	eagerState = null
 ): Update<State> => {
 	return {
 		action,
 		lane,
-		next: null
+		next: null,
+		hasEagerState,
+		eagerState
 	};
 };
 
@@ -41,7 +48,9 @@ export const createUpdateQueue = <State>() => {
 // 将更新添加到队列中
 export const enqueueUpdate = <State>(
 	updateQueue: UpdateQueue<State>,
-	update: Update<State>
+	update: Update<State>,
+	fiber: FiberNode,
+	lane: Lane
 ) => {
 	const pending = updateQueue.shared.pending;
 	if (pending === null) {
@@ -52,6 +61,12 @@ export const enqueueUpdate = <State>(
 	}
 
 	updateQueue.shared.pending = update;
+
+	fiber.lanes = mergeLanes(fiber.lanes, lane);
+	const alternate = fiber.alternate;
+	if (alternate !== null) {
+		alternate.lanes = mergeLanes(alternate.lanes, lane);
+	}
 };
 
 // 处理更新队列并生成新的状态
@@ -103,7 +118,8 @@ example:
 export const processUpdateQueue = <State>(
 	baseState: State,
 	pendingUpdate: Update<State> | null,
-	renderLane: Lane
+	renderLane: Lane,
+	onSkipUpdate?: (update: Update<State>) => void
 ): {
 	memoizedState: State;
 	baseState: State;
@@ -131,6 +147,9 @@ export const processUpdateQueue = <State>(
 			if (!isSubsetOfLanes(renderLane, updateLane)) {
 				// 优先级不够 被跳过
 				const clone = createUpdate(pending.action, pending.lane);
+
+				onSkipUpdate?.(clone);
+
 				// 是不是第一个被跳过的
 				if (newBaseQueueFirst === null) {
 					newBaseQueueFirst = clone;
@@ -147,10 +166,10 @@ export const processUpdateQueue = <State>(
 					newBaseQueueLast = clone;
 				}
 				const action = pending.action;
-				if (action instanceof Function) {
-					newState = action(baseState);
+				if (pending.hasEagerState) {
+					newState = pending.eagerState;
 				} else {
-					newState = action;
+					newState = basicStateReducer(baseState, action);
 				}
 			}
 			pending = pending.next as Update<any>;
@@ -169,3 +188,14 @@ export const processUpdateQueue = <State>(
 	}
 	return result;
 };
+
+export function basicStateReducer<State>(
+	state: State,
+	action: Action<State>
+): State {
+	if (action instanceof Function) {
+		return action(state);
+	} else {
+		return action;
+	}
+}

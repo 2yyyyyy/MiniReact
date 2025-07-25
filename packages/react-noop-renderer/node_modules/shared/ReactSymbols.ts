@@ -19,4 +19,8 @@ export const REACT_PROVIDER_TYPE = supportSymbol
 
 export const REACT_SUSPENSE_TYPE = supportSymbol
 	? Symbol.for('react.provider')
-	: 0xeac3;
+	: 0xead1;
+
+export const REACT_MEMO_TYPE = supportSymbol
+	? Symbol.for('react.memo')
+	: 0xead3;

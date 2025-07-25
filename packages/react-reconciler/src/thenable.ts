@@ -7,7 +7,7 @@ import {
 
 let suspensededThenable: Thenable<any> | null = null;
 
-export function getSuspensededThenable(): Thenable<any> {
+export function getSuspenseThenable(): Thenable<any> {
 	if (suspensededThenable === null) {
 		throw new Error('应该存在suspensededThenable, 这是个bug');
 	}
@@ -32,7 +32,7 @@ export function trackUsedThenable<T>(thenable: Thenable<T>) {
 				pending.status = 'pending';
 				pending.then(
 					(val) => {
-						if ((pending.status = 'pending')) {
+						if (pending.status === 'pending') {
 							// @ts-ignore
 							const fulfilled: FullfilledThenable<T, void, any> = pending;
 							fulfilled.status = 'fulfilled';
@@ -40,7 +40,7 @@ export function trackUsedThenable<T>(thenable: Thenable<T>) {
 						}
 					},
 					(err) => {
-						if ((pending.status = 'pending')) {
+						if (pending.status === 'pending') {
 							// @ts-ignore
 							const rejected: RejectedThenable<T, void, any> = pending;
 							rejected.status = 'rejected';
